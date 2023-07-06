@@ -4,7 +4,7 @@
 #include <amxmisc>
 #include <tfcx>
 #include <engine>
-#include <hamsandwich>
+//#include <hamsandwich>
 
 #define PLUGIN "No Nade Suicide"
 #define VERSION "1.0"
