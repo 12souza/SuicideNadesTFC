@@ -33,11 +33,13 @@ public plugin_init() {
 		set_task(60.0, "prematchEnd", 0, "", 0, "a", 1);
 	}
 	enabled = register_cvar("suiNades","0")
+	
 	//nomenabled = register_cvar("nomirvs","0")
 	//nonenabled = register_cvar("nonails","0")
 	//nonhwgenabled = register_cvar("nonHWG","0")
 	//nondemoenabled = register_cvar("nonDEMO","0")
 	register_clcmd("say !nosui", "nosuivote");
+	register_clcmd("say !suivote", "newsetting");
 	register_event( "DeathMsg", "ev_DeathMsg", "a" )
 	register_event("ResetHUD", "player_spawn", "be")
 	/*register_event("AmmoX", "limit_gren", "be")
@@ -45,8 +47,17 @@ public plugin_init() {
 	register_clcmd("primetwo", "block_grenadetwo")
 	register_clcmd("+gren1", "block_grenadeone")
 	register_clcmd("primeone", "block_grenadeone")*/
-	register_logevent("join_team", 3, "1=joined team")
-	
+	register_logevent("join_team", 3, "1=joined team");
+}
+
+stock substr(const input[], start, length, output[], maxlength)
+{
+    new i;
+    for (i = 0; i < length && i < maxlength - 1; i++)
+        output[i] = input[start + i];
+        
+    output[i] = '^0';
+    return i;
 }
 
 
@@ -56,7 +67,7 @@ public client_disconnected(id)
 	if(suivotes[id] == 1){
 		suivotes[id] = 0
 		voteCount--;
-		//client_print(0, print_chat, "%s has rescinded their vote to eliminate nades on suicide by going Specatator.  There are %d votes for that so far..", name, voteCount);
+		//client_print(0, print_chat, "%s has disconnect from server and vote will no longer count.  There are %d votes for that so far..", name, voteCount);
 		if(voteCount <= 7){
 			server_cmd("suiNades 0");
 			client_print(0, print_chat, "8th vote rescinded.. eliminating nades on suicide *****INACTIVE****");
@@ -69,7 +80,7 @@ public hudmsg(){
 	
 	//hud message during PM that shows what to say.. how many votes.. and whether active or inactive
 	if(voteable){
-		set_hudmessage(255, 255, 255, 0.01, 0.28, 0, 6.0, 100.0, 0.0, 0.0, -1)
+		set_hudmessage(255, 255, 255, 0.01, 0.28, 0, 2.0, 2.0, 0.1, 0.2, -1)
 		if(get_pcvar_num(enabled) == 0){
 			show_hudmessage(0, "type !nosui to vote for no nades on suicide^nVote Count: %d^nStatus: INACTIVE", voteCount)
 		}
@@ -81,14 +92,16 @@ public hudmsg(){
 
 public join_team()
 {    
+	//this will make sure that when someone goes spec, their vote is removed.
 	new loguser[80], name[32]
 	new temp[2]
 	read_logargv(0, loguser, 79)
 	parse_loguser(loguser, name, 31)
 	new id = get_user_index(name)
+	new setting = get_player_preference(id)
 	read_logargv(2, temp, 1)
-	
-	if(equal(temp[0], "S")){
+	//searching the first index in a string for the team
+	if(equal(temp[0], "S")){ 
 		if(suivotes[id] == 1){
 			suivotes[id] = 0
 			voteCount--;
@@ -99,9 +112,19 @@ public join_team()
 			}
 		}
 	}
-	
-	
-	
+	if((equal(temp[0], "B") || equal(temp[0], "R")) && voteable){
+		//client_print(0, print_chat, "Joined Team");
+		if( setting == 1 && suivotes[id] == 0){
+			suivotes[id] = 1;
+			voteCount++;
+			client_print(0, print_chat, "%s has voted to eliminate nades on suicide.  There are %d votes for that so far..", name, voteCount);
+			if(voteCount == 8){
+		client_print(0, print_chat, "There are 8 votes to eliminate nades on suicide, it will be *****ACTIVE***** for this pug.."); 
+		server_cmd("suiNades 1");
+	}
+			
+		}
+	}
 }
 
 /*public client_death ( attacker, victim, wpnindex, hitplace, TK ){
@@ -120,6 +143,7 @@ if (get_pcvar_num(enabled) == 2){
 
 }*/
 
+//acts as a toggle.  if someone types !nosui itll put in their vote.  If their vote is in, itll remove their vote.
 public nosuivote(id){
 new Name[32];
 get_user_name(id, Name, sizeof(Name) - 1);
@@ -148,22 +172,31 @@ else if((suivotes[id] == 1) && (voteable)){
 
 }
 
+//possible kill vote that i was thinking of doing since we need all 8.  If someone knows they are not going to vote FOR no nade, they could've just killed the vote.. but idk
 public killvote(){
 
 }
 
+
+//assigned to a set task thatll happen exactly one time for prematch end.  Will give center msg depending on what suiNades is set to.
 public prematchEnd(){
 prematch = true;
 voteable = false;
 remove_task(10, 0)
+set_hudmessage(255, 255, 255, 0.4, 0.2, 0, 6.0, 5.0, 0.0, 0.0, -1)
 if(get_pcvar_num(enabled) == 1){
-	client_print(0,print_center,"No Nade Suicide ***ACTIVE***")
+	//client_print(0,print_center,"No Nade Suicide ***ACTIVE***")
+	show_hudmessage(0, "No Nade Suicide ***ACTIVE***")
 }
 if(get_pcvar_num(enabled) == 0){
-	client_print(0,print_center,"No Nade Suicide ***INACTIVE***")
+	//client_print(0,print_center,"No Nade Suicide ***INACTIVE***")
+	show_hudmessage(0, "No Nade Suicide ***INACTIVE***")
 }
 //client_print(0, print_chat, "PM END");
 }
+
+//Death msg that will give all everything we need to determine if someone killed themselves and what class they were.  We do not set nades to 0 right away 
+//because they need to spawn.  So we put their id in an array resetNades for when they do spawn.
 public  ev_DeathMsg() {
 if(prematch){
 	if (get_pcvar_num(enabled) == 0) return PLUGIN_HANDLED
@@ -182,6 +215,8 @@ if(prematch){
 }
 }
 
+//Player has spawned if their id is set to 1 in resetNades itll give them 0 nades and set their id to 0
+//to ensure it only happens on THAT particular spawn.
 public player_spawn(id){
 new class = entity_get_int(id, EV_INT_playerclass)
 if(resetNades[id] == 1){
@@ -212,6 +247,8 @@ tfc_setbammo(id, TFC_AMMO_NADE2, 0);
 }*/
 }
 
+
+//function for limiting nades, not active.
 public limit_gren(id){
 new class = entity_get_int(id, EV_INT_playerclass)
 if((get_pcvar_num(nomenabled) == 1) && (class == 4 || class == 6)){
@@ -287,3 +324,117 @@ return PLUGIN_HANDLED
 return PLUGIN_CONTINUE
 
 }
+
+public get_player_preference(id)
+{
+     //new int:steamId = id;
+    new steamId[32];
+    get_user_authid(id, steamId, sizeof(steamId));
+	
+    new file = fopen("suisetting.txt", "rt");
+    if (!file)
+    {
+        server_print("Failed to open player ratings file.");
+        return 0;
+    }
+    if(file){
+	new line[128], currentSteamId[32], ratingStr[32];
+	new elo = 0;
+
+    //while (fgets(file, line, sizeof(line)) != -1)
+    while (!feof(file))
+    {
+        fgets(file, line, charsmax(line));
+        new lineLength = strlen(line);
+
+        // Find the index of the delimiter (e.g., comma)
+        new delimiterIndex = -1;
+        for (new i = 0; i < lineLength; i++)
+        {
+            if (line[i] == ',')
+            {
+                delimiterIndex = i;
+                break;
+            }
+        }
+
+        if (delimiterIndex != -1)
+        {
+            // Extract the SteamID and rating from the line
+            substr(line, 0, delimiterIndex, currentSteamId, sizeof(currentSteamId) - 1);
+            substr(line, delimiterIndex + 1, lineLength - delimiterIndex - 1, ratingStr, sizeof(ratingStr) - 1);
+
+            if (equal(currentSteamId, steamId))
+	    //new int:compID = str_to_num(currentSteamId);
+	    //if(compID == steamId)
+            {
+                elo = str_to_num(ratingStr);
+                break;
+            }
+        }
+    }
+    fclose(file);
+    return elo;
+   }
+
+    
+}
+
+public newsetting(id){
+    new setting = get_player_preference(id);
+    //set_pdata_int(id, 0, elo);
+    RemoveLine(id)
+    if(setting == 0){
+    	new authID[64];
+	get_user_authid(id, authID, 31);
+	strcat(authID, ",1",63);
+	write_file("suisetting.txt", authID, -1);
+	client_print(id, print_chat, "Your automatic suivote is now ** ON **" );
+   }
+   if(setting == 1){
+	new authID[64];
+	get_user_authid(id, authID, 31);
+	strcat(authID, ",0",63);
+	write_file("suisetting.txt", authID, -1);
+	client_print(id, print_chat, "Your automatic suivote is now ** OFF **" );
+   }
+   
+   return PLUGIN_CONTINUE;
+}
+
+public RemoveLine( id)
+{       
+    new bool:bUserFound ;
+    new iFilePos;
+    new szLineItem[ 64 ];
+    new authID[ 35 ];
+    
+    get_user_authid(id, authID, 31);
+    
+    new iFileHandle = fopen( "suisetting.txt" , "rt" );
+    iFilePos = 0;
+
+    while ( !feof( iFileHandle ) )
+    {
+        fgets( iFileHandle , szLineItem , charsmax( szLineItem ) );
+
+        iFilePos++;
+        
+        if( containi( szLineItem , authID) != -1 )
+        {
+            write_file( "suisetting.txt" , "" , iFilePos - 1 );
+            bUserFound = true;
+            
+            break;
+        }
+    }
+
+    fclose(iFileHandle);
+
+    client_print(id, print_chat, "%s", bUserFound ? "setting successfully changed" : "setting added" );
+        
+    return PLUGIN_HANDLED;
+}
+/* AMXX-Studio Notes - DO NOT MODIFY BELOW HERE
+*{\\ rtf1\\ ansi\\ ansicpg1252\\ deff0\\ deflang1033{\\ fonttbl{\\ f0\\ fnil Tahoma;}}\n\\ viewkind4\\ uc1\\ pard\\ f0\\ fs16 \n\\ par }
+*/
